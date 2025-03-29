@@ -12,4 +12,4 @@ The shade of the triangle rises to max then falls to zero. At the zero point the
 space - clear
 
 ## Screen Shot
-![alt text](https://github.com/dlharmon911/Lines/blob/master/shot.png "Screen Shot")
+![alt text](https://github.com/dlharmon911/Lines/blob/master/screenshot.png "Screen Shot")
