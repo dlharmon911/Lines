@@ -142,6 +142,7 @@
     <ClCompile Include="main.c" />
     <ClCompile Include="src\color.c" />
     <ClCompile Include="src\draw.c" />
+    <ClCompile Include="src\mouse.c" />
     <ClCompile Include="src\point.c" />
   </ItemGroup>
   <ItemGroup>

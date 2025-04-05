@@ -10,12 +10,17 @@ static ALLEGRO_DISPLAY* display = NULL;
 static ALLEGRO_EVENT_QUEUE* event_queue = NULL;
 static ALLEGRO_TIMER* timer = NULL;
 static ALLEGRO_BITMAP* bitmap = NULL;
+static ALLEGRO_BITMAP* cursor = NULL;
 static MOUSE mouse = { { 0.0f, 0.0f}, false, 0, 0 };
 static TRIANGLE triangle = { {0.0f, 0.0f}, {0.0f, 0.0f}, {0.0f, 0.0f} };
 static bool redraw = true;
 static bool running = true;
 static int line_count = 1;
-static ALLEGRO_COLOR EIGENGRAU = { 0.08627451f, 0.08627451f, 0.11372549f, 1.0f };
+static BUTTON key[ALLEGRO_KEY_MAX];
+static POINT mouse_diff = { 0.0f, 0.0f };
+static POINT display_size = { 0.0f, 0.0f };
+static POINT bitmap_size = { 0.0f, 0.0f };
+static POINT aspect_ratio = { 0.0f, 0.0f };
 
 static int init()
 {
@@ -46,6 +51,7 @@ static int init()
 	}
 
 	al_set_new_window_title("Lines");
+	al_set_new_display_flags(ALLEGRO_WINDOWED | ALLEGRO_RESIZABLE);
 	display = al_create_display(SCREEN_WIDTH, SCREEN_HEIGHT);
 	if (!display)
 	{
@@ -53,6 +59,14 @@ static int init()
 	}
 	al_clear_to_color(EIGENGRAU);
 	al_flip_display();
+	point_set_f(&display_size, (float)al_get_display_width(display), (float)al_get_display_height(display));
+	al_hide_mouse_cursor(display);
+
+	cursor = create_mouse_cursor();
+	if (!cursor)
+	{
+		return -1;
+	}
 
 	bitmap = al_create_bitmap(SCREEN_WIDTH, SCREEN_HEIGHT);
 	if (!bitmap)
@@ -64,6 +78,10 @@ static int init()
 	al_set_target_bitmap(bitmap);
 	al_clear_to_color(EIGENGRAU);
 	al_set_target_bitmap(target_bitmap);
+
+	point_set_f(&bitmap_size, (float)al_get_bitmap_width(bitmap), (float)al_get_bitmap_height(bitmap));
+	point_set(&aspect_ratio, &display_size);
+	point_divide(&aspect_ratio, &bitmap_size);
 
 	event_queue = al_create_event_queue();
 	if (!event_queue)
@@ -83,10 +101,26 @@ static int init()
 
 static void shutdown()
 {
-	al_destroy_bitmap(bitmap);
-	al_destroy_display(display);
-	al_destroy_event_queue(event_queue);
-	al_destroy_timer(timer);
+	if (bitmap)
+	{
+		al_destroy_bitmap(bitmap);
+	}
+	if (cursor)
+	{
+		al_destroy_bitmap(cursor);
+	}
+	if (event_queue)
+	{
+		al_destroy_event_queue(event_queue);
+	}
+	if (timer)
+	{
+		al_destroy_timer(timer);
+	}
+	if (display)
+	{
+		al_destroy_display(display);
+	}
 }
 
 static void process_input(int keycode)
@@ -95,6 +129,10 @@ static void process_input(int keycode)
 
 	switch (keycode)
 	{
+	case ALLEGRO_KEY_ESCAPE:
+	{
+		running = false;
+	} break;
 	case ALLEGRO_KEY_SPACE:
 	{
 		ALLEGRO_BITMAP* target_bitmap = al_get_target_bitmap();
@@ -137,11 +175,14 @@ static void process_input(int keycode)
 
 		line_count = 4;
 	} break;
-	}
-
-	if (line_change)
+	case ALLEGRO_KEY_TAB:
 	{
-		mouse.is_pressed &= (~((uint32_t)ALLEGRO_MOUSE_BUTTON_LEFT));
+		point_set(&mouse.point, &triangle.point1);
+		point_set(&triangle.point1, &triangle.point2);
+		point_set(&triangle.point2, &mouse.point);
+		al_set_mouse_xy(display, (int)mouse.point.x, (int)mouse.point.y);
+	} break;
+	default: return;
 	}
 }
 
@@ -163,12 +204,21 @@ static void input()
 		{
 			running = false;
 		} break;
+		case ALLEGRO_EVENT_DISPLAY_RESIZE:
+		{
+			al_acknowledge_resize(display);
+			point_set_f(&display_size, (float)al_get_display_width(display), (float)al_get_display_height(display));
+			point_set(&aspect_ratio, &display_size);
+			point_divide(&aspect_ratio, &bitmap_size);
+		} break;
+		case ALLEGRO_EVENT_KEY_DOWN:
+		{
+			key[event.keyboard.keycode].is_pressed = true;
+			key[event.keyboard.keycode].was_pressed = true;
+		} break;
 		case ALLEGRO_EVENT_KEY_UP:
 		{
-			if (event.keyboard.keycode == ALLEGRO_KEY_ESCAPE)
-			{
-				running = false;
-			}
+			key[event.keyboard.keycode].is_pressed = false;
 
 			process_input(event.keyboard.keycode);
 
@@ -178,6 +228,10 @@ static void input()
 			static POINT event_mouse = { 0.0f, 0.0f };
 
 			point_set_f(&event_mouse, (float)event.mouse.x, (float)event.mouse.y);
+			point_set_f(&mouse_diff, (float)event.mouse.dx, (float)event.mouse.dy);
+
+			point_multiply(&event_mouse, &aspect_ratio);
+			point_multiply(&mouse_diff, &aspect_ratio);
 
 			if (!point_equals(&mouse.point, &event_mouse))
 			{
@@ -195,15 +249,16 @@ static void input()
 		{
 			mouse.is_pressed &= (~event.mouse.button);
 		} break;
+		default: return;
 		}
 	}
 }
 
 static void logic()
 {
-	if (mouse.is_pressed & ALLEGRO_MOUSE_BUTTON_LEFT)
+	if (key[ALLEGRO_KEY_LSHIFT].is_pressed)
 	{
-		if (mouse.was_pressed & ALLEGRO_MOUSE_BUTTON_LEFT)
+		if (key[ALLEGRO_KEY_LSHIFT].was_pressed)
 		{
 			point_set(&triangle.point1, &mouse.point);
 			point_set(&triangle.point2, &mouse.point);
@@ -286,21 +341,30 @@ static void draw()
 {
 	static ALLEGRO_BITMAP* target_bitmap = NULL;
 	static const COLOR RED = { 1.0f, 0.0f, 0.0f };
+	static POINT line_start = { 0.0f, 0.0f };
+	static POINT line_end = { 0.0f, 0.0f };
 
 	target_bitmap = al_get_target_bitmap();
 	al_set_target_bitmap(bitmap);
 
-	if (mouse.is_pressed & ALLEGRO_MOUSE_BUTTON_LEFT)
+	if (key[ALLEGRO_KEY_LSHIFT].is_pressed)
 	{
 		draw_triangles();
 	}
 
 	al_set_target_bitmap(target_bitmap);
-	al_draw_bitmap(bitmap, 0, 0, 0);
-	if (mouse.is_pressed & ALLEGRO_MOUSE_BUTTON_LEFT)
+	al_draw_scaled_bitmap(bitmap, 0, 0, bitmap_size.x, bitmap_size.y, 0.0f, 0.0f, display_size.x, display_size.y, 0);
+	if (key[ALLEGRO_KEY_LSHIFT].is_pressed && (mouse.is_pressed & ALLEGRO_MOUSE_BUTTON_LEFT))
 	{
-		draw_line(&triangle.point1, &triangle.point2, &RED, 2.0f);
+		point_set(&line_start, &triangle.point1);
+		point_set(&line_end, &triangle.point2);
+		point_divide(&line_start, &bitmap_size);
+		point_multiply(&line_start, &display_size);
+		point_divide(&line_end, &bitmap_size);
+		point_multiply(&line_end, &display_size);
+		draw_line(&line_start, &line_end, &RED, 2.0f);
 	}
+	draw_mouse_cursor(cursor, &mouse.point);
 	al_flip_display();
 }
 
@@ -308,25 +372,26 @@ static void loop()
 {
 	while (running)
 	{
+		for (int i = 0; i < ALLEGRO_KEY_MAX; i++)
+		{
+			key[i].was_pressed = false;
+		}
+		mouse.was_pressed = 0;
+
 		input();
 		logic();
-		mouse.was_pressed = 0;
 		draw();
 	}
 }
 
 int main(int argc, char** argv)
 {
-	if (init() != 0)
+	if (init() == 0)
 	{
-		return -1;
+		al_start_timer(timer);
+		loop();
+		al_stop_timer(timer);
 	}
-
-	al_start_timer(timer);
-
-	loop();
-
-	al_stop_timer(timer);
 
 	shutdown();
 

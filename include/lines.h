@@ -9,6 +9,7 @@ static const int SCREEN_HEIGHT = 800;
 static const int SHADE_MAX = 360;
 static const int SHADE_DELTA = 2;
 static const float MARGIN = 0.2f;
+static ALLEGRO_COLOR EIGENGRAU = { 0.08627451f, 0.08627451f, 0.11372549f, 1.0f };
 
 enum COLOR_INDEX
 {
@@ -42,6 +43,12 @@ typedef struct TRIANGLE
 	POINT point2;
 	POINT point3;
 } TRIANGLE;
+
+typedef struct BUTTON
+{
+	bool is_pressed;
+	bool was_pressed;
+} BUTTON;
 
 typedef struct MOUSE
 {
@@ -82,5 +89,8 @@ void draw_triangle(const TRIANGLE* triangle, const COLOR* color, float thickness
 void draw_filled_triangle(const TRIANGLE* triangle, const COLOR* color);
 void draw_line(const POINT* point1, const POINT* point2, const COLOR* color, float thickness);
 
+// Mouse Cursor functions
+ALLEGRO_BITMAP* create_mouse_cursor();
+void draw_mouse_cursor(ALLEGRO_BITMAP* cursor, POINT* point);
 
 #endif // !_LINES_H
